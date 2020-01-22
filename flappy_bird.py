@@ -107,7 +107,7 @@ class Pipe:
         win.blit(self.PIPE_TOP, (self.x, self.top))
         win.blit(self.PIPE_BOTTOM, (self.x, self.bottom))
 
-    def collide(self, bird, win):
+    def collide(self, bird):
         bird_mask = bird.get_mask()
         top_mask = pygame.mask.from_surface(self.PIPE_TOP)
         bottom_mask = pygame.mask.from_surface(self.PIPE_BOTTOM)
@@ -163,18 +163,35 @@ def draw_window(win, bird, pipes, base):
 def main():
     bird = Bird(240, 360)
     base = Base(730)
-    pipes = [Pipe(700)]
+    pipes = [Pipe(600)]
     win = pygame.display.set_mode((WIN_WIDTH, WIN_HEIGHT))
     clock = pygame.time.Clock()
     game_running = True
+    score = 0
     while game_running:
         clock.tick(30)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 game_running = False
         # bird.move()
+        add_pipe = False
+        removed = []
         for pipe in pipes:
+            if pipe.collide(bird):
+                pass
+            if pipe.x + pipe.PIPE_TOP.get_width() < 0:
+                removed.append(pipe)
+            
+            if not pipe.passed and pipe.x < bird.x:
+                pipe.passed = True
+                add_pipe = True
             pipe.move()
+        if add_pipe:
+            score += 1
+            pipes.append(Pipe(600))
+
+        for r in removed:
+            pipes.remove(r)
         base.move()
         draw_window(win, bird, pipes, base)
     pygame.quit()

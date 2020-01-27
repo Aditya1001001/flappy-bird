@@ -6,6 +6,7 @@ import random
 
 WIN_WIDTH = 500
 WIN_HEIGHT = 800
+Generation = 0
 
 BIRD_IMGS = [pygame.transform.scale2x(pygame.image.load(os.path.join("images", "bird1.png"))), pygame.transform.scale2x(
     pygame.image.load(os.path.join("images", "bird2.png"))), pygame.transform.scale2x(pygame.image.load(os.path.join("images", "bird3.png")))]
@@ -162,25 +163,31 @@ class Base:
         win.blit(self.IMG, (self.x2, self.y))
 
 
-def draw_window(win, bird, pipes, base, score):
+def draw_window(win, birds, pipes, base, score, gen):
     win.blit(BG_IMG, (0, 0))
     for pipe in pipes:
         pipe.draw(win)
     text = GAME_FONT.render("Score-   " + str(score), 1, (255, 255, 255))
     # keep changing the location of the score based on the number of digits
     win.blit(text, (WIN_WIDTH - 10 - text.get_width(), 10))
+    text = GAME_FONT.render("Gen-   " + str(gen), 1, (255, 255, 255))
+    win.blit(text, (10, 10))
     base.draw(win)
-    bird.draw(win)
+    for bird in birds:
+        bird.draw(win)
     pygame.display.update()
 
 
-def main(genomes, config):
+def fitness_fxn(genomes, config):
     nets = []
     birds = []
     ge = []
 
-    for g in genomes:
-        net = neat.nn.FeedForwardNetwork(g, config)
+    global Generation
+    Generation +=1
+
+    for _, g in genomes:
+        net = neat.nn.FeedForwardNetwork.create(g, config)
         nets.append(net)
         birds.append(Bird(240, 360))
         g.fitness = 0
@@ -197,10 +204,34 @@ def main(genomes, config):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 game_running = False
+                pygame.quit()
+                quit()
+                break
+        
+        # if there are more than one pipes on screen ckeck for distance with second pipe
+        pipe_index = 0
+        if len(birds) > 0:
+            if len(pipes) > 1 and birds[0].x > pipes[0].x + pipes[0].PIPE_TOP.get_width():
+                pipe_index = 1
+        else:
+            game_running = False
+            break
+        
+        # moving the brids and passing the inputs to the corresponding neural network
+        for x, bird in enumerate(birds):
+            ge[x].fitness += 0.1
+            bird.move()
+            
+            output = nets[x].activate((bird.y, abs(bird.y - pipes[pipe_index].height), abs(bird.y - pipes[pipe_index].bottom)))
+
+            if output[0] > .5:
+                bird.jump()
+        base.move()
         # bird.move()
         add_pipe = False
         removed = []
         for pipe in pipes:
+            pipe.move()
             for x,bird in enumerate(birds):
                 if pipe.collide(bird):
                     # decreasing the fitness of birds that hit a pipe 
@@ -215,7 +246,6 @@ def main(genomes, config):
 
             if pipe.x + pipe.PIPE_TOP.get_width() < 0:
                 removed.append(pipe)
-            pipe.move()
         if add_pipe:
             score += 1
             for g in ge:
@@ -225,34 +255,33 @@ def main(genomes, config):
         for r in removed:
             pipes.remove(r)
         for x, bird in enumerate(birds):
-            if bird.y + bird.img.get_height() >= 730:
+            if bird.y + bird.img.get_height() >= 730 or bird.y <=0:
                 birds.remove(bird)
                 nets.pop(x)
                 ge.pop(x)
 
-        base.move()
-        draw_window(win, bird, pipes, base, score)
-    pygame.quit()
-    quit()
+        draw_window(win, birds, pipes, base, score, Generation)
 
 
-main()
+
 
 
 def run(config_path):
     config = neat.config.Config(neat.DefaultGenome, neat.DefaultReproduction,
-                                neat.DefaultSpecieSet, neat.DefaultStagnation, config_path)
+                                neat.DefaultSpeciesSet, neat.DefaultStagnation, config_path)
     
     pop = neat.Population(config)
 
 
     pop.add_reporter(neat.StdOutReporter(True))
-    stats = neat.StatisticReporter()
+    stats = neat.StatisticsReporter()
     pop.add_reporter(stats)
     
-    winner = pop.run(main,50)
+
+    winner = pop.run(fitness_fxn,50)
 
 
 if __name__ == "__main__":
     current_dir = os.path.dirname(__file__)
     config_path = os.path.join(current_dir, "config.txt")
+    run(config_path)
